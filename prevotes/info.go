@@ -1,10 +1,8 @@
 package prevotes
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"io"
 	"log"
 	"net/http"
@@ -13,9 +11,6 @@ import (
 	"sync"
 
 	"github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/types/query"
-	staketypes "github.com/cosmos/cosmos-sdk/x/staking/types"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 var (
@@ -67,6 +62,7 @@ func GetValNames(addr string) *ValNames {
 
 		for _, val := range valResp.Result.Validators {
 			v.setKey(val.PubKey.Value, index)
+			v.setIndex(index, val.Address)
 			i, _ := strconv.ParseInt(val.VotingPower, 10, 64)
 			vp += uint64(i)
 			index += 1
@@ -116,52 +112,52 @@ func GetValNames(addr string) *ValNames {
 		}
 	}
 
-	client, err := rpchttp.New(addr, "/websocket")
-	if err != nil {
-		log.Fatal(err)
-	}
-	var limit uint64 = 100
-	var offset uint64 = 0
+	// client, err := rpchttp.New(addr, "/websocket")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// var limit uint64 = 100
+	// var offset uint64 = 0
 
-	for {
-		valsQuery := staketypes.QueryValidatorsRequest{
-			Status:     "BOND_STATUS_BONDED",
-			Pagination: &query.PageRequest{Limit: limit, Offset: offset},
-		}
-		q, e := valsQuery.Marshal()
-		if e != nil {
-			log.Println(e)
-			continue
-		}
-		valsResult, e := client.ABCIQuery(context.Background(), "/cosmos.staking.v1beta1.Query/Validators", q)
-		if e != nil {
-			log.Println(e)
-			continue
-		}
-		if len(valsResult.Response.Value) > 0 {
-			valsResp := staketypes.QueryValidatorsResponse{}
-			e = valsResp.Unmarshal(valsResult.Response.Value)
-			if e != nil {
-				log.Println(e)
-				continue
-			}
-			for _, val := range valsResp.Validators {
-				annoyed := make(map[string]interface{})
-				e = yaml.Unmarshal([]byte(val.String()), &annoyed)
-				if e != nil {
-					log.Println(e)
-					continue
-				}
-				i := v.getByKey(annoyed["consensus_pubkey"].(map[string]interface{})["key"].(string))
-				v.setIndex(i, strings.TrimSpace(val.Description.Moniker))
-			}
-			if len(valsResp.Pagination.GetNextKey()) > 0 {
-				offset += 1
-			} else {
-				break
-			}
-		}
-	}
+	// for {
+	// 	valsQuery := staketypes.QueryValidatorsRequest{
+	// 		Status:     "BOND_STATUS_BONDED",
+	// 		Pagination: &query.PageRequest{Limit: limit, Offset: offset},
+	// 	}
+	// 	q, e := valsQuery.Marshal()
+	// 	if e != nil {
+	// 		log.Println(e)
+	// 		continue
+	// 	}
+	// 	valsResult, e := client.ABCIQuery(context.Background(), "/cosmos.staking.v1beta1.Query/Validators", q)
+	// 	if e != nil {
+	// 		log.Println(e)
+	// 		continue
+	// 	}
+	// 	if len(valsResult.Response.Value) > 0 {
+	// 		valsResp := staketypes.QueryValidatorsResponse{}
+	// 		e = valsResp.Unmarshal(valsResult.Response.Value)
+	// 		if e != nil {
+	// 			log.Println(e)
+	// 			continue
+	// 		}
+	// 		for _, val := range valsResp.Validators {
+	// 			annoyed := make(map[string]interface{})
+	// 			e = yaml.Unmarshal([]byte(val.String()), &annoyed)
+	// 			if e != nil {
+	// 				log.Println(e)
+	// 				continue
+	// 			}
+	// 			i := v.getByKey(annoyed["consensus_pubkey"].(map[string]interface{})["key"].(string))
+	// 			v.setIndex(i, strings.TrimSpace(val.Description.Moniker))
+	// 		}
+	// 		if len(valsResp.Pagination.GetNextKey()) > 0 {
+	// 			offset += 1
+	// 		} else {
+	// 			break
+	// 		}
+	// 	}
+	// }
 
 	return v
 }
@@ -223,6 +219,7 @@ func (v *ValNames) GetInfo(index int) string {
 type rpcValidatorsResp struct {
 	Result struct {
 		Validators []struct {
+			Address     string                 `json:"address"`
 			PubKey      struct{ Value string } `json:"pub_key"`
 			VotingPower string                 `json:"voting_power"`
 		} `json:"validators"`
